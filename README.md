@@ -2,6 +2,8 @@
 
 🧹 A GitHub CLI extension that helps you clean up your forked repositories through an interactive interface.
 
+![demo](https://github.com/user-attachments/assets/d92ebcb2-774d-464a-b04c-aa0176bd8c90)
+
 ## Features
 
 - 🔍 Detects and warns about forks with open pull requests
@@ -47,10 +49,6 @@ The extension will:
 4. Warn you about forks that have open pull requests
 5. Ask if you want to delete each fork
 6. Process your choice (delete or skip)
-
-## Screenshots
-
-![Demo](demo.gif) _(Add a demo.gif to showcase the extension in action)_
 
 ## Contributing
 
