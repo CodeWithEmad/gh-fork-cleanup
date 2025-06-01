@@ -24,6 +24,21 @@ type Repo struct {
 	NameWithOwner string `json:"nameWithOwner"`
 	IsArchived    bool   `json:"isArchived"`
 	UpdatedAt     string `json:"updatedAt"`
+	Parent        struct {
+		NameWithOwner    string `json:"nameWithOwner"`
+		DefaultBranchRef struct {
+			Name   string `json:"name"`
+			Target struct {
+				Oid string `json:"oid"`
+			} `json:"target"`
+		} `json:"defaultBranchRef"`
+	} `json:"parent"`
+	DefaultBranchRef struct {
+		Name   string `json:"name"`
+		Target struct {
+			Oid string `json:"oid"`
+		} `json:"target"`
+	} `json:"defaultBranchRef"`
 }
 
 type PullRequestInfo struct {
@@ -33,6 +48,11 @@ type PullRequestInfo struct {
 	Number int    `json:"number"`
 	Title  string `json:"title"`
 	Url    string `json:"url"`
+}
+
+type CommitComparison struct {
+	AheadBy  int `json:"ahead_by"`
+	BehindBy int `json:"behind_by"`
 }
 
 func showSpinner(done chan bool) {
@@ -126,6 +146,21 @@ func getForks() ([]Repo, error) {
 							login
 							id
 						}
+						parent {
+							nameWithOwner
+							defaultBranchRef {
+								name
+								target {
+									oid
+								}
+							}
+						}
+						defaultBranchRef {
+							name
+							target {
+								oid
+							}
+						}
 					}
 					pageInfo {
 						hasNextPage
@@ -185,6 +220,33 @@ func getForks() ([]Repo, error) {
 	return forks, nil
 }
 
+func getCommitComparison(fork Repo) (*CommitComparison, error) {
+	if fork.Parent.NameWithOwner == "" || fork.Parent.DefaultBranchRef.Name == "" || fork.DefaultBranchRef.Name == "" {
+		return nil, fmt.Errorf("missing required repository information")
+	}
+
+	// Use gh api to get the comparison between the fork and its parent
+	cmd := exec.Command("gh", "api",
+		fmt.Sprintf("repos/%s/compare/%s...%s:%s",
+			fork.Parent.NameWithOwner,
+			fork.Parent.DefaultBranchRef.Name,
+			fork.Owner.Login,
+			fork.DefaultBranchRef.Name,
+		),
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("error comparing repositories: %v\nOutput: %s", err, string(out))
+	}
+
+	var comparison CommitComparison
+	if err := json.Unmarshal(out, &comparison); err != nil {
+		return nil, fmt.Errorf("error parsing comparison response: %v", err)
+	}
+
+	return &comparison, nil
+}
+
 var rootCmd = &cobra.Command{
 	Use:   "gh-fork-cleanup",
 	Short: "Clean up your GitHub forks",
@@ -239,6 +301,17 @@ func cleanupForks(cmd *cobra.Command, args []string) {
 		color.New(color.FgYellow).Printf("   Last updated: %s\n", fork.UpdatedAt)
 		if fork.IsArchived {
 			color.New(color.FgRed).Println("   📦 This repository is archived")
+		}
+
+		// Show commit comparison information
+		if comparison, err := getCommitComparison(fork); err == nil {
+			if comparison.AheadBy > 0 || comparison.BehindBy > 0 {
+				color.New(color.FgBlue).Printf("   📊 Commits: %d ahead, %d behind of %s\n",
+					comparison.AheadBy,
+					comparison.BehindBy,
+					fork.Parent.NameWithOwner,
+				)
+			}
 		}
 
 		// Show PR information upfront
