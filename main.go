@@ -246,9 +246,22 @@ func cleanupForks(cmd *cobra.Command, args []string) {
 		}
 
 		if !force {
-			color.New(color.FgMagenta).Print("❔ Delete this repository? (y/n, default n): ")
+			color.New(color.FgMagenta).Print("❔ Delete this repository? (y/n/o to open in browser, default n): ")
 			scanner.Scan()
 			answer := strings.ToLower(strings.TrimSpace(scanner.Text()))
+
+			if answer == "o" {
+				repoURL := fmt.Sprintf("https://github.com/%s", fork.NameWithOwner)
+				openCmd := exec.Command("xdg-open", repoURL)
+				if err := openCmd.Run(); err != nil {
+					fmt.Fprintf(os.Stderr, "Error opening URL: %v\n", err)
+				}
+				// Ask again after opening the URL
+				color.New(color.FgMagenta).Print("❔ Delete this repository? (y/n, default n): ")
+				scanner.Scan()
+				answer = strings.ToLower(strings.TrimSpace(scanner.Text()))
+			}
+
 			if answer != "y" {
 				color.New(color.FgBlue).Printf("⏭️  Skipping %s...\n", fork.Name)
 				continue
