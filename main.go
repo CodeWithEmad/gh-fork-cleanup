@@ -298,7 +298,7 @@ func cleanupForks(cmd *cobra.Command, args []string) {
 	for _, fork := range forks {
 		fmt.Print("\n")
 		color.New(color.FgGreen, color.Bold).Printf("📂 Repository: %s\n", fork.Name)
-		color.New(color.FgYellow).Printf("   Last updated: %s\n", fork.UpdatedAt)
+		color.New(color.FgBlue).Printf("   🔄 Forked from: %s\n", fork.Parent.NameWithOwner)
 		if fork.IsArchived {
 			color.New(color.FgRed).Println("   📦 This repository is archived")
 		}
@@ -306,10 +306,9 @@ func cleanupForks(cmd *cobra.Command, args []string) {
 		// Show commit comparison information
 		if comparison, err := getCommitComparison(fork); err == nil {
 			if comparison.AheadBy > 0 || comparison.BehindBy > 0 {
-				color.New(color.FgBlue).Printf("   📊 Commits: %d ahead, %d behind of %s\n",
+				color.New(color.FgBlue).Printf("   📊 Commits: %d ahead, %d behind\n",
 					comparison.AheadBy,
 					comparison.BehindBy,
-					fork.Parent.NameWithOwner,
 				)
 			}
 		}
@@ -322,7 +321,7 @@ func cleanupForks(cmd *cobra.Command, args []string) {
 				color.New(color.FgBlue).Printf("      URL: %s\n", pr.Url)
 			}
 		}
-
+		color.New(color.FgYellow).Printf("   📅 Last updated: %s\n", fork.UpdatedAt)
 		if !force {
 			color.New(color.FgMagenta).Print("❔ Delete this repository? (y/n/o to open in browser, default n): ")
 			scanner.Scan()
