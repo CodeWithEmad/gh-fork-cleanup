@@ -2,7 +2,7 @@
 
 🧹 A GitHub CLI extension that helps you clean up your forked repositories through an interactive interface.
 
-![demo](https://github.com/user-attachments/assets/d92ebcb2-774d-464a-b04c-aa0176bd8c90)
+![demo](https://github.com/user-attachments/assets/4434be7c-bee9-4031-b144-789541f41991)
 
 ## Features
 
