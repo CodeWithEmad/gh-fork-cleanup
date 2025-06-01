@@ -50,6 +50,25 @@ The extension will:
 5. Ask if you want to delete each fork
 6. Process your choice (delete or skip)
 
+## Development
+
+1. Fork and clone the repository
+
+    ```bash
+    gh repo fork CodeWithEmad/gh-fork-cleanup # or just use Github website
+    git@github.com:YOUR_USERNAME/gh-fork-cleanup.git
+    ```
+
+2. Make your changes to the code
+
+3. Build the executable
+
+    ```bash
+    go build -o gh-fork-cleanup
+    ```
+
+and enjoy hacking!
+
 ## Contributing
 
 Contributions are welcome! Feel free to open issues or submit pull requests.
