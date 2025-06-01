@@ -7,9 +7,12 @@
 ## Features
 
 - 🔍 Detects and warns about forks with open pull requests
+- 🔄 Shows commit comparison with parent repository
+- 📦 Identifies archived repositories
 - 📅 Shows last update time for each fork
 - ✨ Interactive yes/no prompts for each repository
 - 🔒 Safe deletion process using GitHub CLI
+- 🌐 Open fork URLs directly in your browser
 
 ## Installation
 
