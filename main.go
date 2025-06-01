@@ -22,6 +22,7 @@ type Repo struct {
 	Name          string `json:"name"`
 	Owner         Owner  `json:"owner"`
 	NameWithOwner string `json:"nameWithOwner"`
+	IsArchived    bool   `json:"isArchived"`
 	UpdatedAt     string `json:"updatedAt"`
 }
 
@@ -120,6 +121,7 @@ func getForks() ([]Repo, error) {
 						name
 						nameWithOwner
 						updatedAt
+						isArchived
 						owner {
 							login
 							id
@@ -235,6 +237,9 @@ func cleanupForks(cmd *cobra.Command, args []string) {
 		fmt.Print("\n")
 		color.New(color.FgGreen, color.Bold).Printf("📂 Repository: %s\n", fork.Name)
 		color.New(color.FgYellow).Printf("   Last updated: %s\n", fork.UpdatedAt)
+		if fork.IsArchived {
+			color.New(color.FgRed).Println("   📦 This repository is archived")
+		}
 
 		// Show PR information upfront
 		if prs, hasPRs := reposWithPRs[fork.NameWithOwner]; hasPRs {
