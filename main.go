@@ -248,7 +248,7 @@ func getCommitComparison(fork Repo) (*CommitComparison, error) {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "gh-fork-cleanup",
+	Use:   "gh fork-cleanup",
 	Short: "Clean up your GitHub forks",
 	Long: `A CLI tool to help you clean up your GitHub forks.
 It shows you all your forks, highlighting those that haven't been updated recently
