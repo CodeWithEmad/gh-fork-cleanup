@@ -246,12 +246,12 @@ func getCommitComparison(fork Repo) (*CommitComparison, error) {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "gh-fork-cleanup",
+	Use:   "gh fork-cleanup",
 	Short: "Clean up your GitHub forks",
 	Long: `A CLI tool to help you clean up your GitHub forks.
 It shows you all your forks, highlighting those that haven't been updated recently
 and allows you to delete them if they don't have any open pull requests.`,
-	Run: cleanupForks,
+	RunE: cleanupForks,
 }
 
 func init() {
@@ -259,7 +259,7 @@ func init() {
 	rootCmd.Flags().BoolP("force", "f", false, "It will automatically delete all forks. Be careful when using this option.")
 }
 
-func cleanupForks(cmd *cobra.Command, args []string) {
+func cleanupForks(cmd *cobra.Command, args []string) error {
 	// Start spinner
 	done := make(chan bool)
 	go showSpinner(done)
@@ -272,15 +272,13 @@ func cleanupForks(cmd *cobra.Command, args []string) {
 	color.New(color.FgBlue).Println("Fetching repositories with open pull requests...")
 	reposWithPRs, err := getReposWithOpenPRs()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Fetch all forks using GraphQL
 	forks, err := getForks()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Stop spinner
@@ -288,7 +286,7 @@ func cleanupForks(cmd *cobra.Command, args []string) {
 
 	if len(forks) == 0 {
 		fmt.Println("No forked repositories found.")
-		os.Exit(0)
+		return nil
 	}
 
 	color.New(color.FgCyan, color.Bold).Printf("📦 Found %d forks\n", len(forks))
@@ -364,6 +362,8 @@ func cleanupForks(cmd *cobra.Command, args []string) {
 	}
 	fmt.Println()
 	color.New(color.FgCyan, color.Bold).Println("✨ Process complete!")
+
+	return nil
 }
 
 func main() {
