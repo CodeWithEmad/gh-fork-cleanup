@@ -19,7 +19,6 @@ type Owner struct {
 }
 
 type Repo struct {
-	Name          string `json:"name"`
 	Owner         Owner  `json:"owner"`
 	NameWithOwner string `json:"nameWithOwner"`
 	IsArchived    bool   `json:"isArchived"`
@@ -138,7 +137,6 @@ func getForks() ([]Repo, error) {
 			viewer {
 				repositories(first: 100, after: $after, isFork: true, orderBy: {field: UPDATED_AT, direction: DESC}) {
 					nodes {
-						name
 						nameWithOwner
 						updatedAt
 						isArchived
@@ -295,7 +293,7 @@ func cleanupForks(cmd *cobra.Command, args []string) error {
 	scanner := bufio.NewScanner(os.Stdin)
 	for _, fork := range forks {
 		fmt.Print("\n")
-		color.New(color.FgGreen, color.Bold).Printf("📂 Repository: %s\n", fork.Name)
+		color.New(color.FgGreen, color.Bold).Printf("📂 Repository: %s\n", fork.NameWithOwner)
 		color.New(color.FgBlue).Printf("   🔄 Forked from: %s\n", fork.Parent.NameWithOwner)
 		if fork.IsArchived {
 			color.New(color.FgRed).Println("   📦 This repository is archived")
@@ -338,7 +336,7 @@ func cleanupForks(cmd *cobra.Command, args []string) error {
 			}
 
 			if answer != "y" {
-				color.New(color.FgBlue).Printf("⏭️  Skipping %s...\n", fork.Name)
+				color.New(color.FgBlue).Printf("⏭️  Skipping %s...\n", fork.NameWithOwner)
 				continue
 			}
 
@@ -348,18 +346,18 @@ func cleanupForks(cmd *cobra.Command, args []string) error {
 				scanner.Scan()
 				confirm := strings.ToLower(strings.TrimSpace(scanner.Text()))
 				if confirm != "yes" {
-					color.New(color.FgBlue).Printf("⏭️  Skipping %s...\n", fork.Name)
+					color.New(color.FgBlue).Printf("⏭️  Skipping %s...\n", fork.NameWithOwner)
 					continue
 				}
 			}
 		}
 
-		color.New(color.FgRed).Printf("🗑️  Deleting %s...\n", fork.Name)
-		deleteCmd := exec.Command("gh", "repo", "delete", fork.Name, "--yes")
+		color.New(color.FgRed).Printf("🗑️  Deleting %s...\n", fork.NameWithOwner)
+		deleteCmd := exec.Command("gh", "repo", "delete", fork.NameWithOwner, "--yes")
 		if err := deleteCmd.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error deleting %s: %v\n", fork.Name, err)
+			fmt.Fprintf(os.Stderr, "Error deleting %s: %v\n", fork.NameWithOwner, err)
 		} else {
-			color.New(color.FgGreen).Printf("✅ Successfully deleted %s.\n", fork.Name)
+			color.New(color.FgGreen).Printf("✅ Successfully deleted %s.\n", fork.NameWithOwner)
 		}
 	}
 	fmt.Println()
