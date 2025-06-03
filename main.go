@@ -1,11 +1,13 @@
 package main
 
 import (
-	"bufio"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
 	"time"
 
@@ -54,23 +56,25 @@ type CommitComparison struct {
 	BehindBy int `json:"behind_by"`
 }
 
-func showSpinner(done chan bool) {
+func showSpinner(ctx context.Context, done chan bool) {
 	spinner := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 	i := 0
 	for {
 		select {
+		case <-ctx.Done():
+			fmt.Print("\r") // Clear the spinner
+			return
 		case <-done:
 			fmt.Print("\r") // Clear the spinner
 			return
-		default:
+		case <-time.After(100 * time.Millisecond):
 			fmt.Printf("\r%s Fetching forks", spinner[i])
 			i = (i + 1) % len(spinner)
-			time.Sleep(100 * time.Millisecond)
 		}
 	}
 }
 
-func getReposWithOpenPRs() (map[string][]PullRequestInfo, error) {
+func getReposWithOpenPRs(ctx context.Context) (map[string][]PullRequestInfo, error) {
 	// GraphQL query to get all open PRs
 	query := `
 		query {
@@ -89,7 +93,7 @@ func getReposWithOpenPRs() (map[string][]PullRequestInfo, error) {
 		}
 	`
 
-	cmd := exec.Command("gh", "api", "graphql", "-f", fmt.Sprintf("query=%s", query))
+	cmd := exec.CommandContext(ctx, "gh", "api", "graphql", "-f", fmt.Sprintf("query=%s", query))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("error fetching open PRs: %v\nOutput: %s", err, string(out))
@@ -130,7 +134,7 @@ func getReposWithOpenPRs() (map[string][]PullRequestInfo, error) {
 	return reposWithPRs, nil
 }
 
-func getForks() ([]Repo, error) {
+func getForks(ctx context.Context) ([]Repo, error) {
 	// GraphQL query to get all forks with pagination
 	query := `
 		query($after: String) {
@@ -179,7 +183,7 @@ func getForks() ([]Repo, error) {
 		if cursor != "" {
 			args = append(args, "-f", fmt.Sprintf("after=%s", cursor))
 		}
-		cmd := exec.Command("gh", args...)
+		cmd := exec.CommandContext(ctx, "gh", args...)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return nil, fmt.Errorf("error fetching forks: %v\nOutput: %s", err, string(out))
@@ -218,13 +222,13 @@ func getForks() ([]Repo, error) {
 	return forks, nil
 }
 
-func getCommitComparison(fork Repo) (*CommitComparison, error) {
+func getCommitComparison(ctx context.Context, fork Repo) (*CommitComparison, error) {
 	if fork.Parent.NameWithOwner == "" || fork.Parent.DefaultBranchRef.Name == "" || fork.DefaultBranchRef.Name == "" {
 		return nil, fmt.Errorf("missing required repository information")
 	}
 
 	// Use gh api to get the comparison between the fork and its parent
-	cmd := exec.Command("gh", "api",
+	cmd := exec.CommandContext(ctx, "gh", "api",
 		fmt.Sprintf("repos/%s/compare/%s...%s:%s",
 			fork.Parent.NameWithOwner,
 			fork.Parent.DefaultBranchRef.Name,
@@ -251,7 +255,9 @@ var rootCmd = &cobra.Command{
 	Long: `A CLI tool to help you clean up your GitHub forks.
 It shows you all your forks, highlighting those that haven't been updated recently
 and allows you to delete them if they don't have any open pull requests.`,
-	RunE: cleanupForks,
+	RunE:          cleanupForks,
+	SilenceUsage:  true, // Don't show usage on error
+	SilenceErrors: true, // Disable cobra error handling. Errors are handled in the main function, we skip some of them
 }
 
 func init() {
@@ -260,9 +266,12 @@ func init() {
 }
 
 func cleanupForks(cmd *cobra.Command, args []string) error {
+	// retrieve the context set in the main function
+	ctx := cmd.Context()
+
 	// Start spinner
 	done := make(chan bool)
-	go showSpinner(done)
+	go showSpinner(ctx, done)
 
 	// Get flags
 	force, _ := cmd.Flags().GetBool("force")
@@ -270,13 +279,13 @@ func cleanupForks(cmd *cobra.Command, args []string) error {
 
 	// Get all repos with open PRs
 	color.New(color.FgBlue).Println("Fetching repositories with open pull requests...")
-	reposWithPRs, err := getReposWithOpenPRs()
+	reposWithPRs, err := getReposWithOpenPRs(ctx)
 	if err != nil {
 		return err
 	}
 
 	// Fetch all forks using GraphQL
-	forks, err := getForks()
+	forks, err := getForks(ctx)
 	if err != nil {
 		return err
 	}
@@ -290,7 +299,7 @@ func cleanupForks(cmd *cobra.Command, args []string) error {
 	}
 
 	color.New(color.FgCyan, color.Bold).Printf("📦 Found %d forks\n", len(forks))
-	scanner := bufio.NewScanner(os.Stdin)
+	scanner := newScanner(os.Stdin)
 	for _, fork := range forks {
 		fmt.Print("\n")
 		color.New(color.FgGreen, color.Bold).Printf("📂 Repository: %s\n", fork.NameWithOwner)
@@ -300,7 +309,7 @@ func cleanupForks(cmd *cobra.Command, args []string) error {
 		}
 
 		// Show commit comparison information
-		if comparison, err := getCommitComparison(fork); err == nil {
+		if comparison, err := getCommitComparison(ctx, fork); err == nil {
 			if comparison.AheadBy > 0 || comparison.BehindBy > 0 {
 				color.New(color.FgBlue).Printf("   📊 Commits: %d ahead, %d behind\n",
 					comparison.AheadBy,
@@ -320,18 +329,27 @@ func cleanupForks(cmd *cobra.Command, args []string) error {
 		color.New(color.FgYellow).Printf("   📅 Last updated: %s\n", fork.UpdatedAt)
 		if !force {
 			color.New(color.FgMagenta).Print("❔ Delete this repository? (y/n/o to open in browser, default n): ")
-			scanner.Scan()
+			err := scanner.Read(ctx)
+			if err != nil {
+				return fmt.Errorf("error reading input: %v", err)
+			}
+
 			answer := strings.ToLower(strings.TrimSpace(scanner.Text()))
 
 			if answer == "o" {
 				repoURL := fmt.Sprintf("https://github.com/%s", fork.NameWithOwner)
-				openCmd := exec.Command("xdg-open", repoURL)
+				openCmd := exec.CommandContext(ctx, "xdg-open", repoURL)
 				if err := openCmd.Run(); err != nil {
+					// this is a non-fatal error, just print a message
+					// no need to stop the program
 					fmt.Fprintf(os.Stderr, "Error opening URL: %v\n", err)
 				}
 				// Ask again after opening the URL
 				color.New(color.FgMagenta).Print("❔ Delete this repository? (y/n, default n): ")
-				scanner.Scan()
+				err := scanner.Read(ctx)
+				if err != nil {
+					return fmt.Errorf("error reading input: %v", err)
+				}
 				answer = strings.ToLower(strings.TrimSpace(scanner.Text()))
 			}
 
@@ -343,7 +361,10 @@ func cleanupForks(cmd *cobra.Command, args []string) error {
 			// Double confirm if there are open PRs and skip-confirmation is not set
 			if _, hasPRs := reposWithPRs[fork.NameWithOwner]; hasPRs && !skipConfirmation {
 				color.New(color.FgRed, color.Bold).Print("❗ This fork has open PRs. Are you ABSOLUTELY sure you want to delete it? (yes/N): ")
-				scanner.Scan()
+				err := scanner.Read(ctx)
+				if err != nil {
+					return fmt.Errorf("error reading input: %v", err)
+				}
 				confirm := strings.ToLower(strings.TrimSpace(scanner.Text()))
 				if confirm != "yes" {
 					color.New(color.FgBlue).Printf("⏭️  Skipping %s...\n", fork.NameWithOwner)
@@ -353,7 +374,7 @@ func cleanupForks(cmd *cobra.Command, args []string) error {
 		}
 
 		color.New(color.FgRed).Printf("🗑️  Deleting %s...\n", fork.NameWithOwner)
-		deleteCmd := exec.Command("gh", "repo", "delete", fork.NameWithOwner, "--yes")
+		deleteCmd := exec.CommandContext(ctx, "gh", "repo", "delete", fork.NameWithOwner, "--yes")
 		if err := deleteCmd.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error deleting %s: %v\n", fork.NameWithOwner, err)
 		} else {
@@ -366,9 +387,31 @@ func cleanupForks(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func main() {
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+// run executes the root command and handles context cancellation.
+//
+// It returns an exit code based on the command execution result.
+// If the command is canceled (e.g., by Ctrl+C), it returns 130.
+// If an error occurs, it prints the error to stderr and returns 1.
+// Otherwise, it returns 0 for a successful execution.
+func run(ctx context.Context) int {
+	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
+	defer cancel()
+
+	err := rootCmd.ExecuteContext(ctx)
+	if err != nil {
+		if errors.Is(ctx.Err(), context.Canceled) {
+			// handle the CTRL+C case silently
+			return 130 // classic exit code for a SIGINT (Ctrl+C) termination
+		}
+
+		fmt.Fprintln(os.Stderr, err)
+		return 1 // return a non-zero exit code for any other error
 	}
+
+	return 0 // success
+}
+
+func main() {
+	ctx := context.Background()
+	os.Exit(run(ctx))
 }
