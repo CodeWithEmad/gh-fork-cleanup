@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cli/go-gh/v2"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
@@ -93,10 +94,9 @@ func getReposWithOpenPRs(ctx context.Context) (map[string][]PullRequestInfo, err
 		}
 	`
 
-	cmd := exec.CommandContext(ctx, "gh", "api", "graphql", "-f", fmt.Sprintf("query=%s", query))
-	out, err := cmd.CombinedOutput()
+	stdout, stderr, err := gh.ExecContext(ctx, "api", "graphql", "-f", fmt.Sprintf("query=%s", query))
 	if err != nil {
-		return nil, fmt.Errorf("error fetching open PRs: %v\nOutput: %s", err, string(out))
+		return nil, fmt.Errorf("error fetching open PRs: %v\nOutput: %s", err, stderr.String())
 	}
 
 	// Parse the GraphQL response
@@ -111,7 +111,7 @@ func getReposWithOpenPRs(ctx context.Context) (map[string][]PullRequestInfo, err
 	}
 
 	var resp Response
-	if err := json.Unmarshal(out, &resp); err != nil {
+	if err := json.Unmarshal(stdout.Bytes(), &resp); err != nil {
 		return nil, fmt.Errorf("error parsing GraphQL response: %v", err)
 	}
 
@@ -183,10 +183,10 @@ func getForks(ctx context.Context) ([]Repo, error) {
 		if cursor != "" {
 			args = append(args, "-f", fmt.Sprintf("after=%s", cursor))
 		}
-		cmd := exec.CommandContext(ctx, "gh", args...)
-		out, err := cmd.CombinedOutput()
+
+		stdout, stderr, err := gh.ExecContext(ctx, args...)
 		if err != nil {
-			return nil, fmt.Errorf("error fetching forks: %v\nOutput: %s", err, string(out))
+			return nil, fmt.Errorf("error fetching forks: %v\nOutput: %s", err, stderr.String())
 		}
 
 		// Parse the GraphQL response
@@ -205,7 +205,7 @@ func getForks(ctx context.Context) ([]Repo, error) {
 		}
 
 		var resp Response
-		if err := json.Unmarshal(out, &resp); err != nil {
+		if err := json.Unmarshal(stdout.Bytes(), &resp); err != nil {
 			return nil, fmt.Errorf("error parsing GraphQL response: %v", err)
 		}
 
@@ -228,7 +228,8 @@ func getCommitComparison(ctx context.Context, fork Repo) (*CommitComparison, err
 	}
 
 	// Use gh api to get the comparison between the fork and its parent
-	cmd := exec.CommandContext(ctx, "gh", "api",
+	stdout, stderr, err := gh.ExecContext(ctx,
+		"api",
 		fmt.Sprintf("repos/%s/compare/%s...%s:%s",
 			fork.Parent.NameWithOwner,
 			fork.Parent.DefaultBranchRef.Name,
@@ -236,14 +237,13 @@ func getCommitComparison(ctx context.Context, fork Repo) (*CommitComparison, err
 			fork.DefaultBranchRef.Name,
 		),
 	)
-	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("error comparing repositories: %v\nOutput: %s", err, string(out))
+		return nil, fmt.Errorf("error comparing repositories: %w\nOutput: %s", err, stderr.String())
 	}
 
 	var comparison CommitComparison
-	if err := json.Unmarshal(out, &comparison); err != nil {
-		return nil, fmt.Errorf("error parsing comparison response: %v", err)
+	if err := json.Unmarshal(stdout.Bytes(), &comparison); err != nil {
+		return nil, fmt.Errorf("error parsing comparison response: %w", err)
 	}
 
 	return &comparison, nil
@@ -374,11 +374,11 @@ func cleanupForks(cmd *cobra.Command, args []string) error {
 		}
 
 		color.New(color.FgRed).Printf("🗑️  Deleting %s...\n", fork.NameWithOwner)
-		deleteCmd := exec.CommandContext(ctx, "gh", "repo", "delete", fork.NameWithOwner, "--yes")
-		if err := deleteCmd.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error deleting %s: %v\n", fork.NameWithOwner, err)
+		stdout, stderr, err := gh.ExecContext(ctx, "repo", "delete", fork.NameWithOwner, "--yes")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error deleting %s: %v %s\n", fork.NameWithOwner, err, stderr.String())
 		} else {
-			color.New(color.FgGreen).Printf("✅ Successfully deleted %s.\n", fork.NameWithOwner)
+			color.New(color.FgGreen).Printf("✅ Successfully deleted %s.\n", stdout.String())
 		}
 	}
 	fmt.Println()
