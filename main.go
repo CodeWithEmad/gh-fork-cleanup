@@ -263,6 +263,7 @@ and allows you to delete them if they don't have any open pull requests.`,
 func init() {
 	rootCmd.Flags().BoolP("skip-confirmation", "s", false, "Skip confirmation for forks with open pull requests")
 	rootCmd.Flags().BoolP("force", "f", false, "It will automatically delete all forks. Be careful when using this option.")
+	rootCmd.Flags().BoolP("help", "h", false, "Show help for the fork-cleanup extension")
 }
 
 func cleanupForks(cmd *cobra.Command, args []string) error {
