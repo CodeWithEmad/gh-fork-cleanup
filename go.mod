@@ -2,7 +2,7 @@ module github.com/CodeWithEmad/gh-delete-forks-interactively
 
 go 1.24.0
 
-require github.com/cli/go-gh/v2 v2.12.1
+require github.com/cli/go-gh/v2 v2.12.2
 
 require (
 	github.com/cli/safeexec v1.0.0 // indirect
